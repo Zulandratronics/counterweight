@@ -1,0 +1,7 @@
+{
+  "name": "Contrarian Engine",
+  "description": "An intellectually mature debate tool that analyzes text for logical fallacies, internal inconsistencies, and factual accuracy, providing rigorous counterpoints to unsubstantiated claims.",
+  "requestFramePermissions": [
+    "geolocation"
+  ]
+}
