@@ -1,53 +1,208 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Contrarian Engine</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-    <style>
-        body {
-            font-family: 'Inter', sans-serif;
-            background-color: #0f172a;
-            color: #f8fafc;
-        }
-        .mono {
-            font-family: 'JetBrains Mono', monospace;
-        }
-        ::-webkit-scrollbar {
-            width: 8px;
-        }
-        ::-webkit-scrollbar-track {
-            background: #1e293b;
-        }
-        ::-webkit-scrollbar-thumb {
-            background: #475569;
-            border-radius: 4px;
-        }
-        ::-webkit-scrollbar-thumb:hover {
-            background: #64748b;
-        }
-    </style>
-<script type="importmap">
-{
-  "imports": {
-    "react-dom/": "https://esm.sh/react-dom@^19.2.4/",
-    "recharts": "https://esm.sh/recharts@^3.7.0",
-    "lucide-react": "https://esm.sh/lucide-react@^0.563.0",
-    "react/": "https://esm.sh/react@^19.2.4/",
-    "react": "https://esm.sh/react@^19.2.4",
-    "@google/genai": "https://esm.sh/@google/genai@^1.40.0"
-  }
-}
-</script>
-<link rel="stylesheet" href="/index.css">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Counterweight — Local-First Epistemic & Anti-Sycophancy Audit</title>
+  <meta name="description" content="Zero-telemetry, local-first epistemic rigor and AI anti-sycophancy audit engine with optional Ollama and BYOK deep adversarial critique.">
+  <link rel="stylesheet" href="./web/styles.css">
 </head>
 <body>
-    <div id="root"></div>
-<script type="module" src="/index.tsx"></script>
+  <div class="container">
+    <header class="hero">
+      <div class="badge">Local-First · Zero Telemetry · MIT Open Source</div>
+      <h1><span>Counterweight</span></h1>
+      <p>
+        Epistemic rigor &amp; AI anti-sycophancy audit engine. Catch logical fallacies,
+        unattributed claims, and sycophantic AI echo-mirroring offline in your browser—with
+        optional local Ollama or bring-your-own-key deep steelmanning.
+      </p>
+    </header>
+
+    <main>
+      <section class="card input-shell">
+        <div class="mode-bar">
+          <div class="mode-pills" role="tablist" aria-label="Audit mode">
+            <button type="button" class="pill active" data-mode="auto">Auto-Detect</button>
+            <button type="button" class="pill" data-mode="argument">Argument Audit</button>
+            <button type="button" class="pill" data-mode="transcript">AI Chat Anti-Sycophancy</button>
+          </div>
+          <span class="privacy-note">Offline engine · 0 network calls</span>
+        </div>
+
+        <textarea
+          id="input-text"
+          placeholder="Paste an argument, article excerpt, or a multi-turn User:/Assistant: AI conversation to audit..."
+          aria-label="Text or AI transcript to audit"
+        ></textarea>
+
+        <div class="action-bar">
+          <div class="action-group">
+            <button type="button" id="btn-analyze" class="btn btn-primary">Run Local Audit</button>
+            <button type="button" id="btn-clear" class="btn btn-ghost">Clear</button>
+          </div>
+          <div class="action-group" id="export-bar">
+            <button type="button" id="btn-copy-md" class="btn btn-sm" disabled>Copy Markdown</button>
+            <button type="button" id="btn-dl-md" class="btn btn-sm" disabled>Download .md</button>
+            <button type="button" id="btn-dl-json" class="btn btn-sm" disabled>Download .json</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="presets">
+        <p class="presets-label">Calibration Presets (Click to Load &amp; Audit Instantly)</p>
+        <div class="preset-grid" id="preset-grid"></div>
+      </section>
+
+      <section id="results" class="results hidden" aria-live="polite">
+        <div class="overview-grid">
+          <div class="card score-card">
+            <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);">
+              Counterweight Score
+            </div>
+            <div class="score-ring-wrap">
+              <svg width="144" height="144" viewBox="0 0 144 144" aria-hidden="true">
+                <circle cx="72" cy="72" r="60" stroke="rgba(148,163,184,0.18)" stroke-width="10" fill="none"></circle>
+                <circle id="score-arc" cx="72" cy="72" r="60" stroke="#818cf8" stroke-width="10"
+                        stroke-linecap="round" fill="none" stroke-dasharray="377" stroke-dashoffset="377"></circle>
+              </svg>
+              <div class="score-number">
+                <strong id="score-val">0</strong>
+                <span id="mode-badge">ARGUMENT</span>
+              </div>
+            </div>
+            <span id="band-pill" class="band-pill band-mid">—</span>
+            <div id="meta-stats" class="meta-stats">0 words</div>
+          </div>
+
+          <div class="card">
+            <h2>
+              <span>5-Axis Epistemic Profile</span>
+              <button type="button" id="open-methodology-inline" class="link-btn">Inspect formulas</button>
+            </h2>
+            <div class="radar-wrap">
+              <svg id="radar-svg" width="250" height="230" viewBox="0 0 250 230" role="img" aria-label="5-axis epistemic score radar chart"></svg>
+              <ul id="axis-list" class="axis-list"></ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="two-col">
+          <div class="card">
+            <h2>
+              <span>Flagged Signals</span>
+              <span id="finding-count" class="preset-tag">0</span>
+            </h2>
+            <div id="findings-list"></div>
+          </div>
+
+          <div style="display:flex;flex-direction:column;gap:18px;">
+            <div class="card">
+              <h2>Positive Epistemic Signals</h2>
+              <ul id="positives-list" class="clean-list"></ul>
+            </div>
+            <div class="card">
+              <h2>Crux &amp; Falsification Questions</h2>
+              <ol id="crux-list" class="clean-list"></ol>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <h2>
+            <span>Counterweight Reset / Steelman Prompt</span>
+            <button type="button" id="btn-copy-prompt" class="btn btn-sm">Copy Prompt</button>
+          </h2>
+          <p style="margin:0 0 10px;font-size:13px;color:var(--muted);">
+            Paste this back into ChatGPT, Claude, Gemini, or Ollama to interrupt sycophancy and force a charitable steelman + falsification test.
+          </p>
+          <div id="prompt-box" class="prompt-box"></div>
+        </div>
+
+        <div class="card">
+          <details class="deep-panel">
+            <summary>
+              <span>Optional Deep LLM Adversarial Audit (Local Ollama or BYOK)</span>
+              <span class="preset-tag">Opt-In · Session Only</span>
+            </summary>
+            <p style="margin:10px 0 0;font-size:13px;color:var(--muted);">
+              Run semantic steelmanning, fact-check flags, and deeper counter-arguments using your own local
+              <strong>Ollama</strong> server or an API key (kept only in <code>sessionStorage</code>, never stored on disk or sent to any intermediary).
+            </p>
+            <div class="deep-grid">
+              <div class="field">
+                <label for="llm-provider">Provider</label>
+                <select id="llm-provider">
+                  <option value="ollama">Ollama (Local — localhost:11434)</option>
+                  <option value="openai">OpenAI-Compatible API (BYOK)</option>
+                  <option value="gemini">Google Gemini API (BYOK)</option>
+                </select>
+              </div>
+              <div class="field">
+                <label for="llm-endpoint">Endpoint URL</label>
+                <input id="llm-endpoint" type="text" value="http://localhost:11434/api/chat">
+              </div>
+              <div class="field">
+                <label for="llm-model">Model</label>
+                <input id="llm-model" type="text" value="llama3.1">
+              </div>
+              <div class="field" id="api-key-field" style="display:none;">
+                <label for="llm-key">API Key (sessionStorage only)</label>
+                <input id="llm-key" type="password" placeholder="Paste key for this session only">
+              </div>
+            </div>
+            <div class="action-group">
+              <button type="button" id="btn-deep-audit" class="btn btn-primary btn-sm">Run Deep Adversarial Audit</button>
+            </div>
+            <div id="deep-status" class="status-msg"></div>
+            <div id="deep-output" class="deep-output hidden"></div>
+          </details>
+        </div>
+      </section>
+    </main>
+
+    <footer>
+      <div>
+        <strong>Counterweight v1.0.0</strong> · MIT License · Companion to
+        <a href="https://github.com/Zulandratronics/mckenna-coherence-suite" target="_blank" rel="noopener noreferrer">mckenna-coherence-suite</a>
+      </div>
+      <div class="footer-links">
+        <button type="button" id="open-methodology" class="link-btn">Methodology &amp; Limitations</button>
+        <button type="button" id="open-privacy" class="link-btn">Privacy &amp; Zero-Telemetry</button>
+        <a href="https://github.com/Zulandratronics/counterweight" target="_blank" rel="noopener noreferrer">GitHub Repo</a>
+      </div>
+    </footer>
+  </div>
+
+  <dialog id="modal-methodology" class="modal">
+    <h2>Methodology, Scoring Weights &amp; Honest Limitations</h2>
+    <p>Counterweight's local engine is 100% deterministic—zero hidden prompts, zero mocked metrics. Five 0–100 sub-scores combine into the overall score:</p>
+    <ul>
+      <li><strong>Evidence Density</strong> (25% argument / 15% transcript): rewards concrete citations (URLs, DOIs, years, sample sizes, peer-reviewed markers) and deducts for unattributed stats or weasel attributions.</li>
+      <li><strong>Calibration</strong> (20%): rewards explicit scope limits/caveats and deducts for universal absolutist quantifiers.</li>
+      <li><strong>Rhetorical Neutrality</strong> (25% / 15%): deducts length-normalized penalties for ad hominem, false dilemma, slippery slope, and high-arousal hype/fear framing.</li>
+      <li><strong>Structural Integrity</strong> (15%): rewards multi-sentence causal/conditional reasoning and flags absolutist stance contradictions.</li>
+      <li><strong>Independence / Anti-Sycophancy</strong> (15% argument / 35% transcript): detects flattery openers and zero-pushback lexical mirroring in AI transcripts; rewards substantive caveats and counter-perspectives.</li>
+    </ul>
+    <p><strong>What deterministic heuristics cannot do:</strong> Lexical checks cannot verify whether an external URL actually supports the claim, detect subtle statistical cherry-picking, or judge domain-specific truth. Use the generated Crux Questions or optional Ollama/BYOK Deep Audit for semantic verification.</p>
+    <div style="text-align:right;margin-top:16px;">
+      <button type="button" class="btn btn-sm" data-close>Close</button>
+    </div>
+  </dialog>
+
+  <dialog id="modal-privacy" class="modal">
+    <h2>Privacy &amp; Zero-Telemetry Guarantee</h2>
+    <ul>
+      <li><strong>Zero network requests by default:</strong> The static site loads no external fonts, scripts, trackers, or CDNs. Everything runs locally in your browser.</li>
+      <li><strong>Optional Deep Audit is strictly opt-in:</strong> Requests go directly from your browser to your local Ollama instance or chosen API provider—never through a proxy server.</li>
+      <li><strong>Session-only API keys:</strong> Optional BYOK keys are stored only in <code>sessionStorage</code> and cleared automatically when you close the tab.</li>
+    </ul>
+    <div style="text-align:right;margin-top:16px;">
+      <button type="button" class="btn btn-sm" data-close>Close</button>
+    </div>
+  </dialog>
+
+  <script defer src="./web/engine.js"></script>
+  <script defer src="./web/app.js"></script>
 </body>
 </html>

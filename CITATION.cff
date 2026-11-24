@@ -1,0 +1,25 @@
+cff-version: 1.2.0
+title: "Counterweight: Local-First Epistemic Rigor & AI Anti-Sycophancy Audit Engine"
+message: "If you use Counterweight in research or evaluation workflows, please cite it using the metadata below."
+type: software
+authors:
+  - family-names: "Dockery"
+    given-names: "Kenneth L."
+    alias: "ZEUX"
+repository-code: "https://github.com/Zulandratronics/counterweight"
+url: "https://zulandratronics.github.io/counterweight/"
+abstract: >-
+  An MIT-licensed, zero-dependency, local-first epistemic audit and AI anti-sycophancy
+  toolkit combining a transparent deterministic rubric (browser + Python stdlib CLI),
+  transcript echo-mirroring detection, tailored steelman/falsification reset prompts,
+  and optional local Ollama or bring-your-own-key deep adversarial audits.
+keywords:
+  - ai-safety
+  - anti-sycophancy
+  - epistemic-audit
+  - steelman
+  - local-first
+  - zero-telemetry
+license: MIT
+version: "1.0.0"
+date-released: "2026-11-23"

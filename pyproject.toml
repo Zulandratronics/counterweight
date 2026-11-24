@@ -1,0 +1,56 @@
+[build-system]
+requires = ["setuptools>=77.0.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "counterweight-epistemics"
+version = "1.0.0"
+description = "Local-first, zero-telemetry epistemic rigor & AI anti-sycophancy audit engine (static web app + pure-stdlib Python CLI)."
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+requires-python = ">=3.10"
+authors = [
+  { name = "Kenneth L. Dockery" }
+]
+keywords = [
+  "ai-safety",
+  "anti-sycophancy",
+  "epistemics",
+  "critical-thinking",
+  "steelman",
+  "local-first",
+  "zero-telemetry",
+]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Intended Audience :: Science/Research",
+  "Intended Audience :: Developers",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+dependencies = []
+
+[project.urls]
+Homepage = "https://github.com/Zulandratronics/counterweight"
+Repository = "https://github.com/Zulandratronics/counterweight"
+"Live Demo" = "https://zulandratronics.github.io/counterweight/"
+Issues = "https://github.com/Zulandratronics/counterweight/issues"
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.0",
+]
+
+[project.scripts]
+counterweight-audit = "counterweight.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["counterweight*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-v"
