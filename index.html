@@ -73,6 +73,7 @@
             </div>
             <span id="band-pill" class="band-pill band-mid">—</span>
             <div id="meta-stats" class="meta-stats">0 words</div>
+            <div id="loop-signal-pill" class="loop-signal" title="Subtle recursive-polling and multi-turn echo indicator (IndigoNoise)">Loop Signal: Clear</div>
           </div>
 
           <div class="card">
@@ -109,11 +110,17 @@
         </div>
 
         <div class="card">
-          <h2>
-            <span>Counterweight Reset / Steelman Prompt</span>
-            <button type="button" id="btn-copy-prompt" class="btn btn-sm">Copy Prompt</button>
+          <h2 class="prompt-head">
+            <span>Counterweight Reset Prompt</span>
+            <div class="prompt-actions">
+              <div class="prompt-tabs" role="tablist" aria-label="Reset prompt mode">
+                <button type="button" id="btn-prompt-steelman" class="prompt-tab active" data-prompt-tab="steelman">Steelman Reset</button>
+                <button type="button" id="btn-prompt-anchor" class="prompt-tab" data-prompt-tab="anchor" title="Optional IndigoNoise reset that strips assistant echo turns and re-anchors to verifiable external sources">External Anchor Reset</button>
+              </div>
+              <button type="button" id="btn-copy-prompt" class="btn btn-sm">Copy Prompt</button>
+            </div>
           </h2>
-          <p style="margin:0 0 10px;font-size:13px;color:var(--muted);">
+          <p id="prompt-help" style="margin:0 0 10px;font-size:13px;color:var(--muted);">
             Paste this back into ChatGPT, Claude, Gemini, or Ollama to interrupt sycophancy and force a charitable steelman + falsification test.
           </p>
           <div id="prompt-box" class="prompt-box"></div>
@@ -163,7 +170,7 @@
 
     <footer>
       <div>
-        <strong>Counterweight v1.0.0</strong> · MIT License · Companion to
+        <strong>Counterweight v1.1.0</strong> · MIT License · Companion to
         <a href="https://github.com/Zulandratronics/mckenna-coherence-suite" target="_blank" rel="noopener noreferrer">mckenna-coherence-suite</a>
       </div>
       <div class="footer-links">

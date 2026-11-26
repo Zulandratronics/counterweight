@@ -40,6 +40,18 @@ class AxisScores:
 
 
 @dataclass(frozen=True)
+class LoopDiagnostics:
+    """Subtle recursive-polling and multi-turn assistant echo diagnostics (IndigoNoise)."""
+
+    recursive_polling_count: int = 0
+    assistant_echo_turns: int = 0
+    pruned_assistant_turns: int = 0
+    flagged: bool = False
+    summary: str = "Clear — no recursive polling or multi-turn echo loops detected."
+    external_anchor_prompt: str = ""
+
+
+@dataclass(frozen=True)
 class AuditReport:
     """Complete deterministic audit output."""
 
@@ -54,6 +66,7 @@ class AuditReport:
     positive_signals: list[str] = field(default_factory=list)
     crux_questions: list[str] = field(default_factory=list)
     counterweight_prompt: str = ""
+    loop_diagnostics: LoopDiagnostics = field(default_factory=LoopDiagnostics)
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -64,6 +77,10 @@ USER_TURN_RE = re.compile(
 )
 ASSISTANT_TURN_RE = re.compile(
     r"^\s*(?:assistant|ai|chatgpt|claude|gemini|model|bot|llm)\s*:\s*(.*)$",
+    re.IGNORECASE,
+)
+ROLE_PREFIX_RE = re.compile(
+    r"^\s*(?:user|human|me|prompt|question|assistant|ai|chatgpt|claude|gemini|model|bot|llm)\s*:\s*",
     re.IGNORECASE,
 )
 
@@ -293,6 +310,106 @@ def _content_tokens(text: str) -> set[str]:
     }
 
 
+def build_external_anchor_prompt(text: str, turns: list[tuple[str, str]]) -> str:
+    """Build an optional IndigoNoise outward-reanchoring reset prompt."""
+    user_turns = [body.strip() for role, body in turns if role == "user" and body.strip()]
+    if user_turns:
+        kept, seen = [], []
+        for ut in user_turns:
+            toks = _content_tokens(ut)
+            is_dup = len(toks) >= 5 and any(
+                (len(toks & p) / len(toks | p)) >= 0.65 for p in seen
+            )
+            if not is_dup:
+                kept.append(ut)
+                if len(toks) >= 5:
+                    seen.append(toks)
+        pruned_context = "\n".join(f"- {u}" for u in kept)
+        context_label = "Pruned user intent (prior assistant echo turns removed):"
+    else:
+        pruned_context = text.strip()
+        context_label = "Source claim to re-anchor externally:"
+    if len(pruned_context) > 550:
+        pruned_context = pruned_context[:550].rstrip() + "..."
+    return (
+        "INDIGONOISE EXTERNAL ANCHOR RESET (Outward Grounding Mode):\n"
+        "Drop all prior conversational echoing, meta-commentary, and self-referential loops. "
+        "Re-anchor strictly to verifiable external artifacts:\n\n"
+        "1. State the core empirical question in 1-2 plain sentences without flattery or recursive framing.\n"
+        "2. Cite at least 2 concrete external anchors (local file paths, reproducible tests, peer-reviewed DOIs, official documentation, or primary datasets).\n"
+        "3. Separate directly observed facts from untested hypotheses.\n"
+        "4. Propose 1 small, falsifiable next step verifiable outside this chat window.\n\n"
+        f"---\n{context_label}\n{pruned_context}"
+    )
+
+
+def _count_repeated_sentences(sent_list: list[str]) -> tuple[int, str]:
+    seen_sets: list[set[str]] = []
+    repeats, first_excerpt = 0, ""
+    for raw in sent_list:
+        body = ROLE_PREFIX_RE.sub("", raw).strip()
+        toks = _content_tokens(body)
+        if len(toks) < 5:
+            continue
+        if any((len(toks & prev) / len(toks | prev)) >= 0.65 for prev in seen_sets):
+            repeats += 1
+            if not first_excerpt:
+                first_excerpt = body
+        else:
+            seen_sets.append(toks)
+    return repeats, first_excerpt
+
+
+def _detect_loop_diagnostics(
+    cleaned: str, resolved_mode: ResolvedMode, turns: list[tuple[str, str]], sentences: list[str]
+) -> tuple[LoopDiagnostics, str]:
+    assistant_turns = [body for role, body in turns if role == "assistant"]
+    user_turns = [body for role, body in turns if role == "user"]
+    if resolved_mode == "transcript" and turns:
+        u_sents = [s.strip() for ut in user_turns for s in SENTENCE_SPLIT_RE.split(ut) if len(s.strip()) >= 4]
+        a_sents = [s.strip() for at in assistant_turns for s in SENTENCE_SPLIT_RE.split(at) if len(s.strip()) >= 4]
+        u_rep, u_ex = _count_repeated_sentences(u_sents)
+        a_rep, a_ex = _count_repeated_sentences(a_sents)
+        recursive_polling_count, loop_excerpt = u_rep + a_rep, (a_ex or u_ex)
+    else:
+        recursive_polling_count, loop_excerpt = _count_repeated_sentences(sentences)
+
+    assistant_echo_turns, prev_asst = 0, []
+    for turn_body in assistant_turns:
+        toks = _content_tokens(turn_body)
+        if len(toks) >= 4 and prev_asst:
+            max_ov = max(len(toks & prev) / len(toks) for prev in prev_asst)
+            if max_ov >= 0.50 and not CITATION_RE.search(turn_body):
+                assistant_echo_turns += 1
+                if not loop_excerpt:
+                    loop_excerpt = turn_body
+        if len(toks) >= 4:
+            prev_asst.append(toks)
+
+    flagged = recursive_polling_count > 0 or assistant_echo_turns > 0
+    if flagged:
+        parts = []
+        if assistant_echo_turns > 0:
+            parts.append(f"{assistant_echo_turns} assistant echo turn(s)")
+        if recursive_polling_count > 0:
+            parts.append(f"{recursive_polling_count} repeated loop clause(s)")
+        summary = f"Detected {' and '.join(parts)}. Optional External Anchor Reset ready."
+    else:
+        summary = "Clear — no recursive polling or multi-turn echo loops detected."
+
+    return (
+        LoopDiagnostics(
+            recursive_polling_count=recursive_polling_count,
+            assistant_echo_turns=assistant_echo_turns,
+            pruned_assistant_turns=len(assistant_turns),
+            flagged=flagged,
+            summary=summary,
+            external_anchor_prompt=build_external_anchor_prompt(cleaned, turns),
+        ),
+        loop_excerpt,
+    )
+
+
 def build_counterweight_prompt(
     text: str,
     mode: ResolvedMode,
@@ -375,6 +492,10 @@ def _generate_crux_questions(mode: ResolvedMode, findings: list[Finding]) -> lis
         questions.append(
             "How can the conflicting absolute claims in this text be reconciled without redefining key terms?"
         )
+    if "recursive_polling_loop" in rule_ids:
+        questions.append(
+            "What verifiable external artifact (file, dataset, DOI, or reproducible test) outside this conversation would settle this question?"
+        )
 
     defaults = [
         "What concrete, observable evidence would cause the author to revise or abandon the central thesis?",
@@ -412,6 +533,7 @@ def audit_text(text: str, mode: AuditMode = "auto") -> AuditReport:
             positive_signals=[],
             crux_questions=["Paste an argument, claim, or AI conversation transcript to audit."],
             counterweight_prompt="",
+            loop_diagnostics=LoopDiagnostics(),
         )
 
     turns = _parse_turns(cleaned)
@@ -529,6 +651,29 @@ def audit_text(text: str, mode: AuditMode = "auto") -> AuditReport:
             )
             penalties["structural_integrity"] += 18.0
 
+    loop_diag, loop_excerpt = _detect_loop_diagnostics(cleaned, resolved_mode, turns, sentences)
+    if loop_diag.flagged:
+        loop_sev: Severity = (
+            "medium"
+            if (loop_diag.assistant_echo_turns >= 2 or loop_diag.recursive_polling_count >= 2)
+            else "low"
+        )
+        ex_text = loop_excerpt or cleaned
+        findings.append(
+            Finding(
+                rule_id="recursive_polling_loop",
+                category="Looping",
+                label="Recursive Polling / Echo Loop",
+                severity=loop_sev,
+                excerpt=ex_text[:140] + ("..." if len(ex_text) > 140 else ""),
+                explanation=loop_diag.summary,
+                suggestion="Optionally use the IndigoNoise External Anchor Reset prompt to strip redundant assistant turns and re-ground in verifiable external sources.",
+            )
+        )
+        penalties["structural_integrity"] += min(
+            16.0, 6.0 * (loop_diag.assistant_echo_turns + loop_diag.recursive_polling_count)
+        )
+
     citation_hits = len(CITATION_RE.findall(cleaned))
     calibration_hits = len(CALIBRATION_RE.findall(cleaned))
     connector_hits = len(REASONING_CONNECTOR_RE.findall(cleaned))
@@ -617,6 +762,7 @@ def audit_text(text: str, mode: AuditMode = "auto") -> AuditReport:
         positive_signals=positive_signals,
         crux_questions=crux_questions,
         counterweight_prompt=prompt,
+        loop_diagnostics=loop_diag,
     )
 
 
@@ -628,6 +774,7 @@ def format_markdown_report(report: AuditReport) -> str:
         f"- **Overall Score:** **{report.overall_score}/100** ({report.band})",
         f"- **Stats:** {report.word_count} words | {report.sentence_count} sentences"
         + (f" | {report.turn_count} turns" if report.turn_count else ""),
+        f"- **Loop Signal (IndigoNoise):** {report.loop_diagnostics.summary}",
         "",
         "## Axis Breakdown",
         f"- **Evidence Density:** {report.axes.evidence_density}/100",
@@ -666,6 +813,13 @@ def format_markdown_report(report: AuditReport) -> str:
         lines.append("## Counterweight Reset / Steelman Prompt")
         lines.append("```text")
         lines.append(report.counterweight_prompt)
+        lines.append("```")
+
+    if report.loop_diagnostics.flagged and report.loop_diagnostics.external_anchor_prompt:
+        lines.append("")
+        lines.append("## Optional External Anchor Reset (IndigoNoise)")
+        lines.append("```text")
+        lines.append(report.loop_diagnostics.external_anchor_prompt)
         lines.append("```")
 
     return "\n".join(lines)

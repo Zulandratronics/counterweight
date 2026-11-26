@@ -7,6 +7,7 @@
 
   const USER_TURN_RE = /^\s*(?:user|human|me|prompt|question)\s*:\s*(.*)$/i;
   const ASSISTANT_TURN_RE = /^\s*(?:assistant|ai|chatgpt|claude|gemini|model|bot|llm)\s*:\s*(.*)$/i;
+  const ROLE_PREFIX_RE = /^\s*(?:user|human|me|prompt|question|assistant|ai|chatgpt|claude|gemini|model|bot|llm)\s*:\s*/i;
 
   const PATTERN_RULES = [
     {
@@ -163,6 +164,150 @@
     }
     return set;
   }
+  function buildExternalAnchorPrompt(text, turns) {
+    const userTurns = turns
+      .filter((t) => t.role === "user" && t.text && t.text.trim())
+      .map((t) => t.text.trim());
+
+    let prunedContext = "";
+    let contextLabel = "Source claim to re-anchor externally:";
+    if (userTurns.length > 0) {
+      const kept = [];
+      const seenSets = [];
+      for (const ut of userTurns) {
+        const toks = contentTokens(ut);
+        let isDup = false;
+        if (toks.size >= 5) {
+          for (const prev of seenSets) {
+            const union = new Set([...toks, ...prev]);
+            let inter = 0;
+            for (const w of toks) if (prev.has(w)) inter += 1;
+            if (union.size && inter / union.size >= 0.65) {
+              isDup = true;
+              break;
+            }
+          }
+        }
+        if (!isDup) {
+          kept.push(ut);
+          if (toks.size >= 5) seenSets.push(toks);
+        }
+      }
+      prunedContext = kept.map((u) => `- ${u}`).join("\n");
+      contextLabel = "Pruned user intent (prior assistant echo turns removed):";
+    } else {
+      prunedContext = (text || "").trim();
+    }
+
+    if (prunedContext.length > 550) {
+      prunedContext = prunedContext.slice(0, 550).trimEnd() + "...";
+    }
+
+    return (
+      "INDIGONOISE EXTERNAL ANCHOR RESET (Outward Grounding Mode):\n" +
+      "Drop all prior conversational echoing, meta-commentary, and self-referential loops. " +
+      "Re-anchor strictly to verifiable external artifacts:\n\n" +
+      "1. State the core empirical question in 1-2 plain sentences without flattery or recursive framing.\n" +
+      "2. Cite at least 2 concrete external anchors (local file paths, reproducible tests, peer-reviewed DOIs, official documentation, or primary datasets).\n" +
+      "3. Separate directly observed facts from untested hypotheses.\n" +
+      "4. Propose 1 small, falsifiable next step verifiable outside this chat window.\n\n" +
+      `---\n${contextLabel}\n${prunedContext}`
+    );
+  }
+
+  function countRepeatedSentences(sentList) {
+    const seenSets = [];
+    let repeats = 0;
+    let firstExcerpt = "";
+    for (const raw of sentList) {
+      const body = raw.replace(ROLE_PREFIX_RE, "").trim();
+      const toks = contentTokens(body);
+      if (toks.size < 5) continue;
+      let matched = false;
+      for (const prev of seenSets) {
+        const union = new Set([...toks, ...prev]);
+        let inter = 0;
+        for (const w of toks) if (prev.has(w)) inter += 1;
+        if (union.size && inter / union.size >= 0.65) {
+          matched = true;
+          break;
+        }
+      }
+      if (matched) {
+        repeats += 1;
+        if (!firstExcerpt) firstExcerpt = body;
+      } else {
+        seenSets.push(toks);
+      }
+    }
+    return { repeats, firstExcerpt };
+  }
+
+  function detectLoopDiagnostics(cleaned, mode, turns, sentences) {
+    const assistantTurns = turns.filter((t) => t.role === "assistant").map((t) => t.text);
+    const userTurns = turns.filter((t) => t.role === "user").map((t) => t.text);
+
+    let recursivePollingCount = 0;
+    let loopExcerpt = "";
+    if (mode === "transcript" && turns.length > 0) {
+      const splitSent = (t) =>
+        t
+          .split(/(?<=[.!?])\s+|\r?\n+/)
+          .map((s) => s.trim())
+          .filter((s) => s.length >= 4);
+      const uRes = countRepeatedSentences(userTurns.flatMap(splitSent));
+      const aRes = countRepeatedSentences(assistantTurns.flatMap(splitSent));
+      recursivePollingCount = uRes.repeats + aRes.repeats;
+      loopExcerpt = aRes.firstExcerpt || uRes.firstExcerpt;
+    } else {
+      const res = countRepeatedSentences(sentences);
+      recursivePollingCount = res.repeats;
+      loopExcerpt = res.firstExcerpt;
+    }
+
+    let assistantEchoTurns = 0;
+    const prevAsstTokens = [];
+    for (const turnBody of assistantTurns) {
+      const toks = contentTokens(turnBody);
+      if (toks.size >= 4 && prevAsstTokens.length > 0) {
+        let maxOverlap = 0;
+        for (const prev of prevAsstTokens) {
+          let inter = 0;
+          for (const w of toks) if (prev.has(w)) inter += 1;
+          const ov = inter / toks.size;
+          if (ov > maxOverlap) maxOverlap = ov;
+        }
+        const hasCitation = countMatches(CITATION_RE, turnBody) > 0;
+        if (maxOverlap >= 0.50 && !hasCitation) {
+          assistantEchoTurns += 1;
+          if (!loopExcerpt) loopExcerpt = turnBody;
+        }
+      }
+      if (toks.size >= 4) prevAsstTokens.push(toks);
+    }
+
+    const flagged = recursivePollingCount > 0 || assistantEchoTurns > 0;
+    let summary = "Clear — no recursive polling or multi-turn echo loops detected.";
+    if (flagged) {
+      const parts = [];
+      if (assistantEchoTurns > 0) parts.push(`${assistantEchoTurns} assistant echo turn(s)`);
+      if (recursivePollingCount > 0) parts.push(`${recursivePollingCount} repeated loop clause(s)`);
+      summary = `Detected ${parts.join(" and ")}. Optional External Anchor Reset ready.`;
+    }
+
+    return {
+      diagnostics: {
+        recursive_polling_count: recursivePollingCount,
+        assistant_echo_turns: assistantEchoTurns,
+        pruned_assistant_turns: assistantTurns.length,
+        flagged,
+        summary,
+        external_anchor_prompt: buildExternalAnchorPrompt(cleaned, turns),
+      },
+      loopExcerpt,
+    };
+  }
+
   function buildCounterweightPrompt(text, mode, findings) {
     const ruleIds = new Set(findings.map((f) => f.rule_id));
     const focus = [];
@@ -228,6 +373,9 @@
     if (ruleIds.has("stance_contradiction")) {
       qs.push("How can the conflicting absolute claims in this text be reconciled without redefining key terms?");
     }
+    if (ruleIds.has("recursive_polling_loop")) {
+      qs.push("What verifiable external artifact (file, dataset, DOI, or reproducible test) outside this conversation would settle this question?");
+    }
 
     const defaults = [
       "What concrete, observable evidence would cause the author to revise or abandon the central thesis?",
@@ -265,6 +413,14 @@
         positive_signals: [],
         crux_questions: ["Paste an argument, claim, or AI conversation transcript to audit."],
         counterweight_prompt: "",
+        loop_diagnostics: {
+          recursive_polling_count: 0,
+          assistant_echo_turns: 0,
+          pruned_assistant_turns: 0,
+          flagged: false,
+          summary: "Clear — no recursive polling or multi-turn echo loops detected.",
+          external_anchor_prompt: "",
+        },
       };
     }
 
@@ -390,6 +546,29 @@
       }
     }
 
+    const { diagnostics: loopDiagnostics, loopExcerpt } = detectLoopDiagnostics(cleaned, mode, turns, sentences);
+    if (loopDiagnostics.flagged) {
+      const loopSev =
+        loopDiagnostics.assistant_echo_turns >= 2 || loopDiagnostics.recursive_polling_count >= 2
+          ? "medium"
+          : "low";
+      const excerptText = loopExcerpt || cleaned;
+      findings.push({
+        rule_id: "recursive_polling_loop",
+        category: "Looping",
+        label: "Recursive Polling / Echo Loop",
+        severity: loopSev,
+        excerpt: excerptText.length > 140 ? excerptText.slice(0, 140) + "..." : excerptText,
+        explanation: loopDiagnostics.summary,
+        suggestion:
+          "Optionally use the IndigoNoise External Anchor Reset prompt to strip redundant assistant turns and re-ground in verifiable external sources.",
+      });
+      penalties.structural_integrity += Math.min(
+        16.0,
+        6.0 * (loopDiagnostics.assistant_echo_turns + loopDiagnostics.recursive_polling_count)
+      );
+    }
+
     const citationHits = countMatches(CITATION_RE, cleaned);
     const calibrationHits = countMatches(CALIBRATION_RE, cleaned);
     const connectorHits = countMatches(REASONING_CONNECTOR_RE, cleaned);
@@ -461,6 +640,7 @@
       positive_signals: positiveSignals,
       crux_questions: generateCruxQuestions(mode, findings),
       counterweight_prompt: buildCounterweightPrompt(cleaned, mode, findings),
+      loop_diagnostics: loopDiagnostics,
     };
   }
 
@@ -472,6 +652,7 @@
       `- **Overall Score:** **${report.overall_score}/100** (${report.band})`,
       `- **Stats:** ${report.word_count} words | ${report.sentence_count} sentences` +
         (report.turn_count ? ` | ${report.turn_count} turns` : ""),
+      `- **Loop Signal (IndigoNoise):** ${report.loop_diagnostics ? report.loop_diagnostics.summary : "Clear"}`,
       "",
       "## Axis Breakdown",
       `- **Evidence Density:** ${report.axes.evidence_density}/100`,
@@ -517,10 +698,13 @@
     if (report.counterweight_prompt) {
       lines.push("## Counterweight Reset / Steelman Prompt", "```text", report.counterweight_prompt, "```");
     }
+    if (report.loop_diagnostics && report.loop_diagnostics.flagged && report.loop_diagnostics.external_anchor_prompt) {
+      lines.push("", "## Optional External Anchor Reset (IndigoNoise)", "```text", report.loop_diagnostics.external_anchor_prompt, "```");
+    }
     return lines.join("\n");
   }
 
-  const api = { auditText, buildCounterweightPrompt, formatMarkdownReport };
+  const api = { auditText, buildCounterweightPrompt, buildExternalAnchorPrompt, formatMarkdownReport };
   if (typeof module !== "undefined" && module.exports) {
     module.exports = api;
   } else {

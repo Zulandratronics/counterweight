@@ -580,3 +580,38 @@ dialog.modal::backdrop {
 
 dialog.modal h2 { margin-top: 0; font-size: 18px; }
 dialog.modal p, dialog.modal li { font-size: 13.5px; color: #cbd5e1; }
+
+/* Subtle IndigoNoise Loop Signal & Optional External Anchor Reset */
+.loop-signal {
+  margin-top: 8px;
+  font-size: 11.5px;
+  font-family: var(--font-mono);
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.08);
+  border: 1px solid var(--border);
+  color: var(--muted);
+  max-width: 100%;
+  transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+}
+.loop-signal.flagged {
+  background: rgba(129, 140, 248, 0.12);
+  border-color: rgba(129, 140, 248, 0.42);
+  color: #c7d2fe;
+}
+.prompt-head { flex-wrap: wrap; }
+.prompt-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.prompt-tabs {
+  display: inline-flex; gap: 4px; padding: 3px; border-radius: 9px;
+  background: var(--bg); border: 1px solid var(--border);
+}
+.prompt-tab {
+  background: transparent; border: 1px solid transparent; color: var(--muted);
+  font-size: 11.5px; font-weight: 600; padding: 4px 9px; border-radius: 6px;
+  cursor: pointer; transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+.prompt-tab:hover { color: var(--text); }
+.prompt-tab.active {
+  background: rgba(129, 140, 248, 0.18); border-color: rgba(129, 140, 248, 0.45); color: #e0e7ff;
+}
+.prompt-tab.suggested:not(.active) { border-color: rgba(129, 140, 248, 0.35); color: var(--indigo); }
