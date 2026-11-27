@@ -512,5 +512,126 @@
     els.deepOutput.classList.remove("hidden");
   }
 
+  /* Quiet 1-click IndigoNoise 1/f procedural rain bed (100% offline WebAudio) */
+  class IndigoRainBed {
+    constructor() {
+      this.ctx = null;
+      this.buffer = null;
+      this.active = false;
+      this.src = null;
+      this.lfo = null;
+      this.gain = null;
+    }
+
+    ensureBuffer() {
+      if (this.buffer && this.buffer.sampleRate === this.ctx.sampleRate) return this.buffer;
+      const sr = this.ctx.sampleRate;
+      const len = sr * 4;
+      const buf = this.ctx.createBuffer(1, len, sr);
+      const out = buf.getChannelData(0);
+      let b0 = 0, b1 = 0, b2 = 0, b3 = 0, b4 = 0, b5 = 0, b6 = 0;
+      let brown = 0;
+      for (let i = 0; i < len; i += 1) {
+        const w = Math.random() * 2 - 1;
+        b0 = 0.99886 * b0 + w * 0.0555179;
+        b1 = 0.99332 * b1 + w * 0.0750759;
+        b2 = 0.96900 * b2 + w * 0.1538520;
+        b3 = 0.86650 * b3 + w * 0.3104856;
+        b4 = 0.55000 * b4 + w * 0.5329522;
+        b5 = -0.7616 * b5 - w * 0.0168980;
+        const pink = (b0 + b1 + b2 + b3 + b4 + b5 + b6 + w * 0.5362) * 0.11;
+        b6 = w * 0.115926;
+        brown = (brown + 0.018 * w) / 1.018;
+        out[i] = Math.max(-0.95, Math.min(0.95, pink * 0.78 + brown * 0.70));
+      }
+      const fade = Math.min(2400, Math.floor(len * 0.05));
+      for (let i = 0; i < fade; i += 1) {
+        const t = i / fade;
+        const endIdx = len - fade + i;
+        out[i] = out[i] * t + out[endIdx] * (1.0 - t);
+      }
+      this.buffer = buf;
+      return buf;
+    }
+
+    start() {
+      if (this.active) return;
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) return;
+      if (!this.ctx) this.ctx = new AC();
+      if (this.ctx.state === "suspended") this.ctx.resume();
+
+      const now = this.ctx.currentTime;
+      const src = this.ctx.createBufferSource();
+      src.buffer = this.ensureBuffer();
+      src.loop = true;
+
+      const hp = this.ctx.createBiquadFilter();
+      hp.type = "highpass";
+      hp.frequency.setValueAtTime(95, now);
+
+      const lp = this.ctx.createBiquadFilter();
+      lp.type = "lowpass";
+      lp.frequency.setValueAtTime(1400, now);
+      lp.Q.setValueAtTime(0.55, now);
+
+      const breath = this.ctx.createGain();
+      breath.gain.setValueAtTime(1.0, now);
+      const lfo = this.ctx.createOscillator();
+      lfo.type = "sine";
+      lfo.frequency.setValueAtTime(0.08, now);
+      const depth = this.ctx.createGain();
+      depth.gain.setValueAtTime(0.07, now);
+      lfo.connect(depth).connect(breath.gain);
+
+      const gain = this.ctx.createGain();
+      gain.gain.setValueAtTime(0.0001, now);
+      gain.gain.exponentialRampToValueAtTime(0.14, now + 0.6);
+
+      src.connect(hp).connect(lp).connect(breath).connect(gain).connect(this.ctx.destination);
+      src.start(now);
+      lfo.start(now);
+
+      this.src = src;
+      this.lfo = lfo;
+      this.gain = gain;
+      this.active = true;
+    }
+
+    stop() {
+      if (!this.active || !this.ctx || !this.gain) return;
+      const now = this.ctx.currentTime;
+      this.gain.gain.cancelScheduledValues(now);
+      this.gain.gain.setValueAtTime(Math.max(0.0001, this.gain.gain.value), now);
+      this.gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.45);
+      const oldSrc = this.src;
+      const oldLfo = this.lfo;
+      setTimeout(() => {
+        try { oldSrc.stop(); } catch {}
+        try { oldLfo.stop(); } catch {}
+      }, 480);
+      this.active = false;
+    }
+
+    toggle() {
+      if (this.active) this.stop();
+      else this.start();
+      return this.active;
+    }
+  }
+
+  const indigoRain = new IndigoRainBed();
+  const btnIndigoRain = document.getElementById("btn-indigo-rain");
+  const lblIndigoRain = document.getElementById("indigo-rain-label");
+  if (btnIndigoRain) {
+    btnIndigoRain.addEventListener("click", () => {
+      const on = indigoRain.toggle();
+      btnIndigoRain.classList.toggle("active", on);
+      btnIndigoRain.setAttribute("aria-pressed", String(on));
+      document.body.classList.toggle("indigo-active", on);
+      if (lblIndigoRain) lblIndigoRain.textContent = on ? "IndigoNoise: On" : "IndigoNoise: Off";
+    });
+  }
+
   els.btnDeep.addEventListener("click", runDeepAudit);
 })();

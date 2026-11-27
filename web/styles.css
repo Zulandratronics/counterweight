@@ -615,3 +615,60 @@ dialog.modal p, dialog.modal li { font-size: 13.5px; color: #cbd5e1; }
   background: rgba(129, 140, 248, 0.18); border-color: rgba(129, 140, 248, 0.45); color: #e0e7ff;
 }
 .prompt-tab.suggested:not(.active) { border-color: rgba(129, 140, 248, 0.35); color: var(--indigo); }
+
+
+/* Quiet 1-click IndigoNoise ambient toggle */
+.mode-right {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.indigo-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 600;
+  font-family: var(--font-mono);
+  background: rgba(129, 140, 248, 0.08);
+  border: 1px solid rgba(129, 140, 248, 0.28);
+  color: var(--muted);
+  cursor: pointer;
+  transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.indigo-toggle:hover {
+  border-color: rgba(129, 140, 248, 0.55);
+  color: var(--text);
+}
+
+.indigo-toggle.active {
+  background: rgba(129, 140, 248, 0.18);
+  border-color: var(--indigo);
+  color: #e0e7ff;
+  box-shadow: 0 0 14px rgba(129, 140, 248, 0.16);
+}
+
+.indigo-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--dim);
+  transition: background 0.2s ease, box-shadow 0.2s ease;
+}
+
+.indigo-toggle.active .indigo-dot {
+  background: var(--indigo);
+  box-shadow: 0 0 6px var(--indigo);
+}
+
+body.indigo-active {
+  background:
+    radial-gradient(circle at 18% 10%, rgba(129, 140, 248, 0.19), transparent 42%),
+    radial-gradient(circle at 82% 85%, rgba(56, 189, 248, 0.10), transparent 44%),
+    var(--bg);
+}
